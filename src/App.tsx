@@ -32,27 +32,78 @@ const starterJson = `{
   }
 }`;
 
-function findActionListReferences(value: unknown, actionListNames: Set<string>): string[] {
-  const found = new Set<string>();
+//function findActionListReferences(value: unknown, actionListNames: Set<string>): string[] {
+//  const found = new Set<string>();
+//
+//  function walk(item: unknown) {
+//    if (typeof item === "string" && actionListNames.has(item)) {
+//      found.add(item);
+//      return;
+//    }
+//
+//    if (Array.isArray(item)) {
+//      for (const child of item) walk(child);
+//      return;
+//    }
+//
+//    if (item && typeof item === "object") {
+//      for (const child of Object.values(item)) walk(child);
+//    }
+//  }
+//
+//  walk(value);
+//  return [...found];
+//}
 
-  function walk(item: unknown) {
-    if (typeof item === "string" && actionListNames.has(item)) {
-      found.add(item);
-      return;
-    }
+function findUnreachableActionLists(
+  actionLists: Record<string, unknown[]>
+): string[] {
+  const names = Object.keys(actionLists);
 
-    if (Array.isArray(item)) {
-      for (const child of item) walk(child);
-      return;
-    }
+  if (names.length === 0) return [];
 
-    if (item && typeof item === "object") {
-      for (const child of Object.values(item)) walk(child);
+  const referenced = new Set<string>();
+
+  for (const actions of Object.values(actionLists)) {
+    if (!Array.isArray(actions)) continue;
+
+    for (const action of actions) {
+      for (const target of extractActionListTargets(action)) {
+        referenced.add(target);
+      }
     }
   }
 
-  walk(value);
-  return [...found];
+  const likelyEntryPoints = names.filter((name) =>
+    /\b(init|start|setup|early init|scenario init)\b/i.test(name)
+  );
+
+  const entryPoints = likelyEntryPoints.length > 0 ? likelyEntryPoints : [names[0]];
+
+  return names.filter(
+    (name) => !entryPoints.includes(name) && !referenced.has(name)
+  );
+}
+
+function findMissingActionListReferences(
+  actionLists: Record<string, unknown[]>
+): { from: string; target: string }[] {
+  const names = new Set(Object.keys(actionLists));
+  const missing: { from: string; target: string }[] = [];
+
+  for (const [from, actions] of Object.entries(actionLists)) {
+    if (!Array.isArray(actions)) continue;
+
+    for (const action of actions) {
+      for (const target of extractActionListTargets(action)) {
+        if (!names.has(target)) {
+          missing.push({ from, target });
+        }
+      }
+    }
+  }
+
+  return missing;
 }
 
 function extractActionListTargets(action: unknown): string[] {
@@ -236,6 +287,7 @@ function DragnFlowApp() {
   const [manualNodes, setManualNodes, onNodesChange] = useNodesState<Node>([]);
   const { setCenter } = useReactFlow();
 
+
   function goToActionList(name: string) {
     setSelectedActionList(name);
 
@@ -269,6 +321,14 @@ function DragnFlowApp() {
     ? parsed.data.actionLists
     : {};
   const actionListNames = useMemo(() => new Set(Object.keys(actionLists)), [actionLists]);
+  const missingRefs = useMemo(
+    () => findMissingActionListReferences(actionLists),
+    [actionLists]
+  );
+  const unreachableActionLists = useMemo(
+    () => findUnreachableActionLists(actionLists),
+    [actionLists]
+  );
 
   const { nodes, edges } = useMemo((): { nodes: Node[]; edges: Edge[] } => {
     const names = Object.keys(actionLists);
@@ -395,7 +455,30 @@ function DragnFlowApp() {
 
         <section className="inspector">
           <h2>{selectedActionList ?? "Select an actionList"}</h2>
-
+          {missingRefs.length > 0 && (
+            <div className="warning-box">
+              <strong>Missing actionList references:</strong>
+              <ul>
+                {missingRefs.map((ref, index) => (
+                  <li key={index}>
+                    <code>{ref.from}</code> → <code>{ref.target}</code>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {unreachableActionLists.length > 0 && (
+            <div className="info-box">
+              <strong>Possibly unreachable actionLists:</strong>
+              <ul>
+                {unreachableActionLists.map((name) => (
+                  <li key={name}>
+                    <code>{name}</code>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
           {selectedActions.length === 0 ? (
             <p className="muted">Click a node to inspect its commands.</p>
           ) : (
