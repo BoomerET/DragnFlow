@@ -330,6 +330,11 @@ function DragnFlowApp() {
     [actionLists]
   );
 
+  const unreachableActionListNames = useMemo(
+    () => new Set(unreachableActionLists),
+    [unreachableActionLists]
+  );
+
   const { nodes, edges } = useMemo((): { nodes: Node[]; edges: Edge[] } => {
     const names = Object.keys(actionLists);
 
@@ -337,6 +342,7 @@ function DragnFlowApp() {
       const actions = Array.isArray(actionLists[name]) ? actionLists[name] : [];
       const stats = getActionListStats(actions);
       const borderColor = getNodeBorderColor(stats);
+      const isUnreachable = unreachableActionListNames.has(name);
 
       return {
         id: name,
@@ -348,7 +354,11 @@ function DragnFlowApp() {
           label: (
             <div>
               <strong>{name}</strong>
-
+              {isUnreachable && (
+                <div className="node-warning">
+                  Possibly unreachable
+                </div>
+              )}
               <div className="node-subtitle">
                 {stats.total} actions
               </div>
@@ -366,11 +376,13 @@ function DragnFlowApp() {
         style: {
           width: 280,
           borderRadius: 12,
-          border:
-            selectedActionList === name
+          border: isUnreachable
+            ? "2px dashed #3b82f6"
+            : selectedActionList === name
               ? `3px solid ${borderColor}`
               : `2px solid ${borderColor}`,
           padding: 12,
+          opacity: isUnreachable ? 0.65 : 1,
         },
       };
     });
