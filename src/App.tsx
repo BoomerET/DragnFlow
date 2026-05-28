@@ -383,6 +383,8 @@ function DragnFlowApp() {
               : `2px solid ${borderColor}`,
           padding: 12,
           opacity: isUnreachable ? 0.65 : 1,
+          backgroundColor: "#1e1e1e",
+          color: "#e5e5e5",
         },
       };
     });
